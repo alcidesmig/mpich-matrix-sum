@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
-#define MATRIX_SIZE (long int) 25960
+#define MATRIX_SIZE (long int) 12980
 
 int main(int argc, char** argv) {
 	float etime;

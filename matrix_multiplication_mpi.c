@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
-#define MATRIX_SIZE 5192
+#define MATRIX_SIZE (long int) 51920
 
 int main(int argc, char** argv) {
 	MPI_Init(&argc, &argv);
@@ -13,39 +13,33 @@ int main(int argc, char** argv) {
 	MPI_Comm_rank( MPI_COMM_WORLD, &myrank );
 	MPI_Comm_size( MPI_COMM_WORLD, &w_size );
 
-	int part_size_for_node = MATRIX_SIZE / (w_size - 1);
+	int part_size_for_node = (MATRIX_SIZE * 2) / (w_size - 1);
 
 	MPI_Status status;
-	MPI_Request * request_a = (MPI_Request *) malloc(sizeof(MPI_Request) * (w_size - 1));
-	MPI_Request * request_b = (MPI_Request *) malloc(sizeof(MPI_Request) * (w_size - 1));
+	MPI_Request * request_ab = (MPI_Request *) malloc(sizeof(MPI_Request) * (w_size - 1));
 	MPI_Request * request_c = (MPI_Request *) malloc(sizeof(MPI_Request) * (w_size - 1));
 
 	if (myrank == 0) {
 		float etime;
 		struct timespec t_start, t_end;
-		int * matrix_a = (int *) malloc(sizeof(int) * MATRIX_SIZE * MATRIX_SIZE);
-		int * matrix_b = (int *) malloc(sizeof(int) * MATRIX_SIZE * MATRIX_SIZE);
+		// Matrix a from 0 to MATRIX_SIZE * MATRIX_SIZE * 2 - 2 considering only pairs
+		// Matrix b from 1 to MATRIX_SIZE * MATRIX_SIZE * 2 - 1 considering only odds
+		int * matrix_a_and_b = (int *) malloc(sizeof(int) * MATRIX_SIZE * MATRIX_SIZE * 2);
 		int * matrix_c = (int *) malloc(sizeof(int) * MATRIX_SIZE * MATRIX_SIZE);
-		for (int i = 0; i < MATRIX_SIZE * MATRIX_SIZE; i++) {
-			matrix_a[i] = rand() % 50;
-			matrix_b[i] = rand() % 50;
+		for (int i = 0; i < MATRIX_SIZE * MATRIX_SIZE * 2 - 1; i++) {
+			matrix_a_and_b[i] = rand() % 50;
 		}
 		clock_gettime(CLOCK_REALTIME, &t_start);
 		for (int i = 1; i < w_size; i++) {
 			printf("Sending for %d\n", i);
-			MPI_Isend((matrix_a + ((i - 1)*part_size_for_node * MATRIX_SIZE)), part_size_for_node * MATRIX_SIZE, MPI_INT, i, i, MPI_COMM_WORLD, &request_a[i - 1]);
-			MPI_Isend((matrix_b + ((i - 1)*part_size_for_node * MATRIX_SIZE)), part_size_for_node * MATRIX_SIZE, MPI_INT, i, i * 1024, MPI_COMM_WORLD, &request_b[i - 1]);
+			// Possible optimization: send together
+			MPI_Isend((matrix_a_and_b + ((i - 1)*part_size_for_node * MATRIX_SIZE)), part_size_for_node * MATRIX_SIZE, MPI_INT, i, i, MPI_COMM_WORLD, &request_ab[i - 1]);
 		}
 		for (int i = 1; i < w_size; i++) {
-			MPI_Wait(&request_a[i - 1], &status);
-			MPI_Test(&request_a[i - 1], &flag, &status);
+			MPI_Wait(&request_ab[i - 1], &status);
+			MPI_Test(&request_ab[i - 1], &flag, &status);
 			if (!flag) {
-				printf("Error on sending a to %d", i);
-			}
-			MPI_Wait(&request_b[i - 1], &status);
-			MPI_Test(&request_b[i - 1], &flag, &status);
-			if (!flag) {
-				printf("Error on sending b to %d", i);
+				printf("Error on sending matrices to %d", i);
 			}
 		}
 		printf("Sent to all nodes\n");
@@ -71,26 +65,20 @@ int main(int argc, char** argv) {
 	} else {
 		int number_amount;
 
-		int * lines_a = (int *) malloc(sizeof(int) * part_size_for_node * MATRIX_SIZE);
-		int * lines_b = (int *) malloc(sizeof(int) * part_size_for_node * MATRIX_SIZE);
-		MPI_Recv(lines_a, part_size_for_node * MATRIX_SIZE, MPI_INT, 0, myrank, MPI_COMM_WORLD,
+		int * lines_a_and_b = (int *) malloc(sizeof(int) * part_size_for_node * MATRIX_SIZE);
+		// Possible optimization: send together
+		MPI_Recv(lines_a_and_b, part_size_for_node * MATRIX_SIZE, MPI_INT, 0, myrank, MPI_COMM_WORLD,
 		         &status);
+		printf("%d\n", part_size_for_node);
 		MPI_Get_count(&status, MPI_INT, &number_amount);
 		if (number_amount != part_size_for_node * MATRIX_SIZE) {
 			printf("Error in %d on receiving a from 0", myrank);
 		}
-		MPI_Recv(lines_b, part_size_for_node * MATRIX_SIZE, MPI_INT, 0, myrank * 1024, MPI_COMM_WORLD,
-		         &status);
-		MPI_Get_count(&status, MPI_INT, &number_amount);
-		if (number_amount != part_size_for_node * MATRIX_SIZE) {
-			printf("Error in %d on receiving b from 0", myrank);
-		}
 		printf("Got data %d!\n", myrank);
-		int * lines_result = (int *) malloc(sizeof(int) * part_size_for_node * MATRIX_SIZE);
-		for (int i = 0; i < part_size_for_node * MATRIX_SIZE; i++) {
-			lines_result[i] = lines_a[i] + lines_b[i];
+		for (int i = 0; i < part_size_for_node * MATRIX_SIZE; i += 2) {
+			lines_a_and_b[i/2] = lines_a_and_b[i] + lines_a_and_b[i+1];
 		}
-		MPI_Send(lines_result, part_size_for_node * MATRIX_SIZE, MPI_INT, 0, myrank * 1024 * 1024, MPI_COMM_WORLD);
+		MPI_Send(lines_a_and_b, part_size_for_node * MATRIX_SIZE, MPI_INT, 0, myrank * 1024 * 1024, MPI_COMM_WORLD);
 	}
 	MPI_Finalize();
 
