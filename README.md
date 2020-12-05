@@ -2,20 +2,20 @@
 Simple task for the discipline of parallel and distributed programming. Objective: sum of matrices using communication between nodes with MPI.
 Two implementations were made, sending the matrices to be added individually and then sending them together (interspersed in another matrix).
 
-#### MPI
+### MPI
 ```
 export NUM_NODES=8
 make mpi
 make run_mpi
 ```
 
-#### Sequential
+### Sequential
 ```
 make seq
 make run_seq
 ```
 
-#### Comparisons (using matrix_multiplication_mpi.c)
+### Comparisons (using matrix_multiplication_mpi.c)
 e.g. 8 nodes = 1 (control) + 7 (process) nodes
 
 __Matrix size = 51920x51920__
